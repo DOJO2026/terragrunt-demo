@@ -56,6 +56,41 @@ dos ambientes: `dev` y `qa`.
 | Herramientas extra en CI/CD y Codespaces | Solo `terraform` | Instalar y mantener también el binario `terragrunt` |
 | Beneficio real hoy (1 solo ambiente) | — | Limitado: el ahorro se nota cuando hay 2+ ambientes o módulos repetidos |
 
+## Bootstrap del backend remoto (`bootstrap/`)
+
+Problema clásico de "huevo y gallina": Terragrunt necesita un Storage Account
+para guardar el state, pero no se puede crear ese Storage Account *con*
+Terraform si ese mismo Terraform ya intenta usarlo como backend remoto.
+
+Por eso `bootstrap/` es una carpeta de Terraform **aparte**, con backend
+**local** (su `.tfstate` vive solo en tu máquina/Codespace, no se sube a
+git ni a Azure), que se corre **una sola vez** para crear el Storage
+Account. Después de esa única corrida, no se vuelve a tocar.
+
+```bash
+cd bootstrap
+terraform init
+terraform plan \
+  -var="client_id=$TF_VAR_client_id" \
+  -var="client_secret=$TF_VAR_client_secret" \
+  -var="tenant_id=$TF_VAR_tenant_id" \
+  -var="subscription_id=$TF_VAR_subscription_id" \
+  -var="storage_account_name=sttfstatetgdemo12345"   # nombre único, minúsculas+números
+
+terraform apply \
+  -var="client_id=$TF_VAR_client_id" \
+  -var="client_secret=$TF_VAR_client_secret" \
+  -var="tenant_id=$TF_VAR_tenant_id" \
+  -var="subscription_id=$TF_VAR_subscription_id" \
+  -var="storage_account_name=sttfstatetgdemo12345"
+
+terraform output resumen_para_terragrunt_hcl
+```
+
+El último comando te imprime el bloque listo para copiar/pegar dentro del
+`remote_state.config` del `terragrunt.hcl` raíz (reemplazando el
+`storage_account_name` placeholder que trae la demo).
+
 ## Pipeline CI/CD (`.github/workflows/terragrunt-apply.yaml`)
 
 Equivalente al `apply.yaml` actual del proyecto, pero adaptado a Terragrunt:
