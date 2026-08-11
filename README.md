@@ -56,40 +56,43 @@ dos ambientes: `dev` y `qa`.
 | Herramientas extra en CI/CD y Codespaces | Solo `terraform` | Instalar y mantener también el binario `terragrunt` |
 | Beneficio real hoy (1 solo ambiente) | — | Limitado: el ahorro se nota cuando hay 2+ ambientes o módulos repetidos |
 
-## Bootstrap del backend remoto (`bootstrap/`)
+## Bootstrap del backend remoto (`bootstrap/` + workflow dedicado)
 
 Problema clásico de "huevo y gallina": Terragrunt necesita un Storage Account
 para guardar el state, pero no se puede crear ese Storage Account *con*
 Terraform si ese mismo Terraform ya intenta usarlo como backend remoto.
 
-Por eso `bootstrap/` es una carpeta de Terraform **aparte**, con backend
-**local** (su `.tfstate` vive solo en tu máquina/Codespace, no se sube a
-git ni a Azure), que se corre **una sola vez** para crear el Storage
-Account. Después de esa única corrida, no se vuelve a tocar.
+`bootstrap/` es una carpeta de Terraform **aparte**, con backend **local**
+(no usa el backend remoto que ella misma va a crear), pensada para correrse
+**una sola vez**. Se ejecuta a través de un workflow dedicado —
+**no manualmente en tu terminal** — para que quede todo el aprovisionamiento
+dentro de GitHub Actions:
 
-```bash
-cd bootstrap
-terraform init
-terraform plan \
-  -var="client_id=$TF_VAR_client_id" \
-  -var="client_secret=$TF_VAR_client_secret" \
-  -var="tenant_id=$TF_VAR_tenant_id" \
-  -var="subscription_id=$TF_VAR_subscription_id" \
-  -var="storage_account_name=sttfstatetgdemo12345"   # nombre único, minúsculas+números
+`.github/workflows/bootstrap.yaml` (disparo manual, `workflow_dispatch`):
 
-terraform apply \
-  -var="client_id=$TF_VAR_client_id" \
-  -var="client_secret=$TF_VAR_client_secret" \
-  -var="tenant_id=$TF_VAR_tenant_id" \
-  -var="subscription_id=$TF_VAR_subscription_id" \
-  -var="storage_account_name=sttfstatetgdemo12345"
+1. Corre `terraform init/plan/apply` sobre `bootstrap/`, usando los mismos
+   4 secrets (`AZURE_CLIENT_ID`, etc.) que ya configuraste.
+2. Como los runners de Actions son efímeros, el `.tfstate` de esa carpeta
+   **se guarda como artifact** del workflow (`bootstrap-tfstate`) al
+   terminar, y se intenta recuperar al inicio de la próxima corrida — así,
+   si necesitas volver a correr el bootstrap, no intenta recrear recursos
+   que ya existen.
+3. Al final imprime en el **resumen del job** (pestaña Actions → el run →
+   Summary) el bloque exacto para pegar en el `remote_state.config` del
+   `terragrunt.hcl` raíz.
 
-terraform output resumen_para_terragrunt_hcl
-```
+**Cómo correrlo:**
+- Repo → pestaña **Actions** → workflow **"Bootstrap - Backend remoto
+  Terragrunt"** → **Run workflow**
+- Ingresa un `storage_account_name` único (solo minúsculas/números, 3-24
+  caracteres) — los nombres de Storage Account son globales en todo Azure,
+  así que no puede ser un valor fijo genérico.
+- Espera a que termine, abre el **Summary** del run, copia el bloque de
+  salida al `terragrunt.hcl` raíz, haz commit y push.
 
-El último comando te imprime el bloque listo para copiar/pegar dentro del
-`remote_state.config` del `terragrunt.hcl` raíz (reemplazando el
-`storage_account_name` placeholder que trae la demo).
+Este workflow se corre **una sola vez** por proyecto (o cada vez que se
+quiera recrear el backend desde cero) — no forma parte del flujo normal de
+`plan`/`apply` de la infraestructura de aplicación.
 
 ## Pipeline CI/CD (`.github/workflows/terragrunt-apply.yaml`)
 

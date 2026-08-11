@@ -1,0 +1,80 @@
+name: 'Bootstrap - Backend remoto Terragrunt'
+
+on:
+  workflow_dispatch:
+    inputs:
+      storage_account_name:
+        description: 'Nombre único global para el Storage Account (solo minúsculas/números, 3-24 chars)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  TF_VAR_client_id: ${{ secrets.AZURE_CLIENT_ID }}
+  TF_VAR_client_secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+  TF_VAR_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
+  TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  TF_VAR_storage_account_name: ${{ github.event.inputs.storage_account_name }}
+
+jobs:
+  bootstrap:
+    name: 'Crear backend remoto (RG + Storage Account)'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.7.0'
+
+      # Recupera el .tfstate de una corrida anterior, si existe.
+      # Así, si el bootstrap ya se corrió antes, "terraform apply"
+      # no intenta recrear recursos que ya existen en Azure.
+      - name: Descargar state previo (si existe)
+        uses: actions/download-artifact@v4
+        with:
+          name: bootstrap-tfstate
+          path: bootstrap
+        continue-on-error: true
+
+      - name: Terraform Init
+        working-directory: bootstrap
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: bootstrap
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: bootstrap
+        run: terraform apply -auto-approve tfplan
+
+      - name: Mostrar outputs en el resumen del job
+        working-directory: bootstrap
+        run: |
+          echo "### Backend remoto creado" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          terraform output resumen_para_terragrunt_hcl >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Copia ese bloque al \`remote_state.config\` de \`terragrunt.hcl\` (raíz), haz commit y push." >> $GITHUB_STEP_SUMMARY
+
+      # Guarda el .tfstate como artifact para la próxima corrida.
+      # Retención larga porque este workflow se corre muy pocas veces.
+      - name: Guardar state como artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-tfstate
+          path: bootstrap/terraform.tfstate
+          retention-days: 90
+          overwrite: true
