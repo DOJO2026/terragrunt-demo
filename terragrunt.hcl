@@ -24,8 +24,12 @@ remote_state {
     if_exists = "overwrite_terragrunt"
   }
   config = {
-    resource_group_name  = "rg-terraform-state"
-    storage_account_name = "sttfstateprojectcc" # debe existir previamente
+    resource_group_name = "rg-terraform-state"
+    # Se lee de la variable de entorno TG_BACKEND_STORAGE_ACCOUNT.
+    # El workflow de GitHub Actions la inyecta desde una Repository
+    # Variable (Settings -> Secrets and variables -> Actions -> Variables),
+    # así este archivo nunca se vuelve a editar a mano después del bootstrap.
+    storage_account_name = get_env("TG_BACKEND_STORAGE_ACCOUNT", "REEMPLAZAR_LOCAL")
     container_name       = "tfstate"
     key                  = "${path_relative_to_include()}/terraform.tfstate"
   }

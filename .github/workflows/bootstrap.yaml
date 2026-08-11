@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: read
+  actions: write # necesario para que "gh variable set" pueda crear/actualizar la Repository Variable
 
 env:
   ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -78,3 +79,15 @@ jobs:
           path: bootstrap/terraform.tfstate
           retention-days: 90
           overwrite: true
+
+      # Setea automáticamente la Repository Variable que usa
+      # terragrunt-apply.yaml, para no tener que editar terragrunt.hcl
+      # ni configurar nada a mano después del bootstrap.
+      - name: Guardar storage_account_name como Repository Variable
+        working-directory: bootstrap
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh variable set TG_BACKEND_STORAGE_ACCOUNT \
+            --body "${{ github.event.inputs.storage_account_name }}" \
+            --repo "${{ github.repository }}"

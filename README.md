@@ -84,15 +84,22 @@ dentro de GitHub Actions:
 **Cómo correrlo:**
 - Repo → pestaña **Actions** → workflow **"Bootstrap - Backend remoto
   Terragrunt"** → **Run workflow**
-- Ingresa un `storage_account_name` único (solo minúsculas/números, 3-24
-  caracteres) — los nombres de Storage Account son globales en todo Azure,
-  así que no puede ser un valor fijo genérico.
-- Espera a que termine, abre el **Summary** del run, copia el bloque de
-  salida al `terragrunt.hcl` raíz, haz commit y push.
+- Ingresa un `storage_account_name` único, **sin espacios** (solo
+  minúsculas/números, 3-24 caracteres) — los nombres de Storage Account son
+  globales en todo Azure, así que no puede ser un valor fijo genérico.
+- Espera a que termine. **No hace falta editar nada a mano después**: el
+  último paso del workflow guarda ese nombre automáticamente como
+  **Repository Variable** (`TG_BACKEND_STORAGE_ACCOUNT`, vía `gh variable
+  set`), y `terragrunt.hcl` la lee con `get_env(...)` en cada corrida del
+  pipeline principal. Cero commits nuevos, cero edición manual del código.
 
 Este workflow se corre **una sola vez** por proyecto (o cada vez que se
 quiera recrear el backend desde cero) — no forma parte del flujo normal de
 `plan`/`apply` de la infraestructura de aplicación.
+
+Puedes verificar que la variable quedó guardada en **Settings → Secrets and
+variables → Actions → pestaña "Variables"** del repo — vas a ver
+`TG_BACKEND_STORAGE_ACCOUNT` con el valor que usó el bootstrap.
 
 ## Pipeline CI/CD (`.github/workflows/terragrunt-apply.yaml`)
 

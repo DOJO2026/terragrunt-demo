@@ -35,6 +35,10 @@ permissions:
 env:
   TERRAGRUNT_VERSION: '0.58.0'
   TERRAFORM_VERSION: '1.7.0'
+  # Nombre del Storage Account del backend, creado por bootstrap.yaml.
+  # Viene de una Repository Variable (no secret), así terragrunt.hcl
+  # nunca necesita editarse a mano tras el bootstrap.
+  TG_BACKEND_STORAGE_ACCOUNT: ${{ vars.TG_BACKEND_STORAGE_ACCOUNT }}
   ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
   ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
   ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
