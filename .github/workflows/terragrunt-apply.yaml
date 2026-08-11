@@ -1,0 +1,110 @@
+name: 'Terragrunt - Infraestructura Azure'
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'modules/**'
+      - 'environments/**'
+      - 'terragrunt.hcl'
+      - '.github/workflows/terragrunt-apply.yaml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Ambiente a desplegar'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - qa
+      action:
+        description: 'Acción a ejecutar'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  TERRAGRUNT_VERSION: '0.58.0'
+  TERRAFORM_VERSION: '1.7.0'
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  TF_VAR_client_id: ${{ secrets.AZURE_CLIENT_ID }}
+  TF_VAR_client_secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+  TF_VAR_tenant_id: ${{ secrets.AZURE_TENANT_ID }}
+  TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  # ==========================================
+  # Job 1: Plan (siempre corre, sirve de preview)
+  # ==========================================
+  plan:
+    name: 'Terragrunt Plan - ${{ github.event.inputs.environment || matrix.environment }}'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Si viene de workflow_dispatch con un ambiente puntual, se filtra abajo.
+        # Si viene de push a main, corre plan en AMBOS ambientes.
+        environment: [dev, qa]
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Instalar Terragrunt
+        run: |
+          curl -L "https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TERRAGRUNT_VERSION }}/terragrunt_linux_amd64" \
+            -o /usr/local/bin/terragrunt
+          chmod +x /usr/local/bin/terragrunt
+          terragrunt --version
+
+      - name: Terragrunt run-all plan (${{ matrix.environment }})
+        if: ${{ github.event_name == 'push' || github.event.inputs.environment == matrix.environment }}
+        working-directory: environments/${{ matrix.environment }}
+        run: terragrunt run-all plan --terragrunt-non-interactive
+
+  # ==========================================
+  # Job 2: Apply (solo manual, con ambiente elegido)
+  # ==========================================
+  apply:
+    name: 'Terragrunt Apply - ${{ github.event.inputs.environment }}'
+    runs-on: ubuntu-latest
+    needs: plan
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'apply'
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Instalar Terragrunt
+        run: |
+          curl -L "https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TERRAGRUNT_VERSION }}/terragrunt_linux_amd64" \
+            -o /usr/local/bin/terragrunt
+          chmod +x /usr/local/bin/terragrunt
+          terragrunt --version
+
+      - name: Terragrunt run-all apply (${{ github.event.inputs.environment }})
+        working-directory: environments/${{ github.event.inputs.environment }}
+        run: terragrunt run-all apply --terragrunt-non-interactive

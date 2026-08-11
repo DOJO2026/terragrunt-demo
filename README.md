@@ -56,6 +56,34 @@ dos ambientes: `dev` y `qa`.
 | Herramientas extra en CI/CD y Codespaces | Solo `terraform` | Instalar y mantener también el binario `terragrunt` |
 | Beneficio real hoy (1 solo ambiente) | — | Limitado: el ahorro se nota cuando hay 2+ ambientes o módulos repetidos |
 
+## Pipeline CI/CD (`.github/workflows/terragrunt-apply.yaml`)
+
+Equivalente al `apply.yaml` actual del proyecto, pero adaptado a Terragrunt:
+
+- **`plan`**: corre siempre (push a `main` o disparo manual), en **matrix** para
+  `dev` y `qa` en paralelo. Es solo preview, no toca infraestructura.
+- **`apply`**: **solo manual** (`workflow_dispatch`), pidiendo elegir el
+  ambiente (`dev`/`qa`) y confirmando la acción. Usa `environment:` de GitHub
+  para poder configurar un *approval* manual antes de aplicar si lo desean
+  (Settings → Environments → Required reviewers).
+
+Diferencias clave frente al `apply.yaml` original:
+
+| `apply.yaml` (Terraform actual) | `terragrunt-apply.yaml` (esta demo) |
+|---|---|
+| `terraform init/plan/apply` | `terragrunt run-all plan` / `run-all apply` (orquesta módulos + dependencias automáticamente) |
+| Un solo ambiente, auto-approve en cada push a main | Plan automático, pero apply manual con selección de ambiente |
+| Sin paso de instalación extra | Requiere instalar el binario de `terragrunt` (paso `curl` en el workflow) |
+
+Para probarlo: en el repo de GitHub, pestaña **Actions** → seleccionar el
+workflow → **Run workflow** → elegir ambiente y acción (`plan` o `apply`).
+
+Nota: sigue usando autenticación por `ARM_CLIENT_SECRET` (igual que el
+`apply.yaml` original), no OIDC federado — el `federated-main.json` que
+tienen configurado apunta al repo `ProyectoCloudComputing`, no a este repo
+de demo, así que si más adelante quieren usar OIDC aquí también, habría que
+crear una credencial federada nueva apuntando a `jgonzaloDev/terragrunt-demo`.
+
 ## Limitaciones / puntos a discutir
 
 - **El proyecto actual solo tiene un ambiente.** Terragrunt reduce
